@@ -1,7 +1,7 @@
 /*---------------- SANDBOX--------------------------------------------
- |version: 0.1  
- |author: Bogdan Sandoi
- *-------------------------------------------------------------------*/
+|version: 0.1  
+|author: Bogdan Sandoi
+*-------------------------------------------------------------------*/
 
 #include <fstream>
 #include <iostream>
@@ -100,21 +100,28 @@ class byteParser
 private:
 	int8_t *m_poz;
 	int8_t m_bitPoz;
+	uint32_t m_bytesParsed;
+	uint32_t m_bitCounter;
 public: 
 	byteParser(int8_t *initPoz)
 	{
-		m_poz = initPoz;
-		m_bitPoz = 0; /*bit offset inside byte, should have values between 0-7*/
+		m_poz			= initPoz;
+		m_bytesParsed	= 0;
+		m_bitPoz		= 0; /*bit offset inside byte, should have values between 0-7*/
+		m_bitCounter	= 0;
 	}
-template <class T>
-/* To Do, add get bytes */
+	template <class T>
+	/* To Do, add get bytes */
 	T getBits(int8_t numOfBits)
 	{
 		T finalVal = 0;
-		int32_t val;
+		T val;
 		int8_t bitsRead = 0;
 		int8_t bitsToRead;
 		int8_t remainingBits;
+
+		assert(numOfBits > 0);
+		m_bitCounter+= numOfBits;
 
 		remainingBits = numOfBits;
 
@@ -127,7 +134,7 @@ template <class T>
 
 			bitsRead += bitsToRead;
 			finalVal |= val << (numOfBits - bitsRead);
-			
+
 
 			remainingBits -= bitsToRead;
 
@@ -136,20 +143,46 @@ template <class T>
 			m_bitPoz %= 8;
 		}
 		return finalVal;
-		
+
 	}
 
-	void jumpBytes(int8_t numOfBytes)
+	void jumpBytes(int16_t numOfBytes)
 	{
+		assert(numOfBytes >= 0);
 		assert(m_bitPoz == 0); /* check we are at the begining of the byte */
 		m_poz += numOfBytes;
 
+		m_bitCounter+= numOfBytes / 8;
+
+	}
+
+	void resetBitCounter()
+	{
+		m_bitCounter = 0;
+	}
+
+	uint32_t getBitCounter()
+	{
+		return m_bitCounter;
 	}
 };
 
-bool readTP(byteParser *pHeader)
+struct ESInfo
 {
-	 
+	int16_t PID;
+	uint64_t dataRate;
+	uint64_t lastPCR;
+	uint64_t PES_SizeAccumulator;
+}
+
+class ESLib
+{
+
+}
+
+bool readTP(byteParser *pHeader, int64_t & PCR )
+{
+
 	uint8_t af_length;
 	uint8_t streamID;
 	bool PESHeaderExt;
@@ -174,6 +207,20 @@ bool readTP(byteParser *pHeader)
 	uint8_t	PES_header_data_length;		
 
 
+	/* adaptation field */
+	bool discontinuity_indicator;				
+	bool random_access_indicator;					
+	bool elementary_stream_priority_indicator;	
+	bool PCR_flag = 0;
+	bool OPCR_flag;								
+	bool splicing_point_flag;						
+	bool transport_private_data_flag;				
+	bool adaptation_field_extension_flag;		
+
+	int64_t PCR_base;
+	uint16_t PCR_extension;
+
+	PCR = -1; /* invalidate PCR*/
 	/*These should go into a TS Packet class*/
 	int8_t sync_byte						= pHeader->getBits<int8_t>(8);
 	uint8_t transport_error_indicator		= pHeader->getBits<int8_t>(1); 
@@ -199,14 +246,52 @@ bool readTP(byteParser *pHeader)
 	if ((adaptation_field_control == AF_ONLY) || (adaptation_field_control == AF_AND_PAYLOAD))
 	{
 		af_length = pHeader->getBits<uint8_t>(8);
+
+		if (af_length > 0)
+		{
+			pHeader->resetBitCounter(); /* Count the number of bits that we read next. Used for sanity check  */
+
+			discontinuity_indicator					= pHeader->getBits<uint8_t>(1);
+			random_access_indicator					= pHeader->getBits<uint8_t>(1);
+			elementary_stream_priority_indicator	= pHeader->getBits<uint8_t>(1); 
+			PCR_flag								= pHeader->getBits<uint8_t>(1);
+			OPCR_flag								= pHeader->getBits<uint8_t>(1);
+			splicing_point_flag						= pHeader->getBits<uint8_t>(1);
+			transport_private_data_flag				= pHeader->getBits<uint8_t>(1);
+			adaptation_field_extension_flag			= pHeader->getBits<uint8_t>(1);
+
+			if (PCR_flag)
+			{
+				PCR_base							= pHeader->getBits<int64_t>(33);
+				pHeader->getBits<uint8_t>(6); /* reserved */
+				PCR_extension						= pHeader->getBits<uint16_t>(9);
+
+				PCR = PCR_base * 300 + PCR_extension;
+
+				//printf("%d; %lld\n", PID,PCR);
+			}
+
+			assert(pHeader->getBitCounter() % 8 == 0);
+			assert(af_length >= pHeader->getBitCounter() / 8);
+			/* we read a byte */
+			af_length -= pHeader->getBitCounter() / 8;
+		}
 		pHeader->jumpBytes(af_length);
 
+	}
+	if (PCR_flag )
+	{
+		if(!payload_unit_start_indicator)
+			printf("%d; %lld<----------\n", PID,PCR);
+		else
+			printf("%d; %lld\n", PID,PCR);
+		//printf("Stop\n");
 	}
 	if (payload_unit_start_indicator)
 	{
 		if (pHeader->getBits<int32_t>(24) == PES_START_CODE_PREFIX)
 		{
-			printf("We found a PES!\n");
+			//printf("We found a PES!\n");
 			streamID = pHeader->getBits<uint8_t>(8);
 			PESPacketLength = pHeader->getBits<uint8_t>(16);
 
@@ -220,10 +305,10 @@ bool readTP(byteParser *pHeader)
 					break;
 				}
 				i++;
-				
+
 			}
 
-			
+
 			if ( i == NO_OF_DEFINED_STREAMS )
 			{
 				printf("Couldn't identify PES stream type\n");
@@ -299,6 +384,7 @@ void main()
 	int lSize;
 	int iterations;
 
+	int64_t PCR;
 	uint32_t index = 0;
 	FILE *pFile;
 
@@ -317,11 +403,12 @@ void main()
 		for (i=0;i<iterations;i++)
 		{
 #ifdef DEBUG_LEVEL_1
-		cout<<"----------------------------"<<endl;
-		cout<<"----Packet "<<i<<"----"<<endl;
-		cout<<"----------------------------"<<endl;
+			cout<<"----------------------------"<<endl;
+			cout<<"----Packet "<<i<<"----"<<endl;
+			cout<<"----------------------------"<<endl;
 #endif
-		readTP(&byteParser(&buffer[index + i*TS_PACKET_SIZE]));
+			readTP(&byteParser(&buffer[index + i*TS_PACKET_SIZE]), PCR);
+			//printf("%lld\n",PCR);
 		}
 
 	}
