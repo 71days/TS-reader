@@ -10,6 +10,11 @@
 #include <stdint.h>
 #include <assert.h>
 
+#ifdef linux
+	#include <fcntl.h>
+	#include <sys/stat.h>
+#endif
+
 #include "byteParser.h"
 #include "TSHeader.h"
 
@@ -71,18 +76,6 @@ bool syncTS(int8_t buffer[], uint32_t &index, int8_t minNumOfSyncBytes, uint32_t
 }
 
 
-
-
-
-
-
-/*
-class PESHeader: public TSHeader
-{
-
-}
-*/
-
 class ESRateInfo
 {
 public:
@@ -90,15 +83,7 @@ public:
 	map<int, int> packetSize;
 	map<int, int64_t>lastTime;
 };
-/*
-class ESLib
-{
 
-}
-*/
-
-//map<int, int> testMap;
-//map<int, int> testMap2;
 
 ESRateInfo rateInfo;
 bool readTP(byteParser *pHeader, int64_t & PCR )
@@ -135,7 +120,7 @@ bool readTP(byteParser *pHeader, int64_t & PCR )
 					rateInfo.lastTime[ts_header.PID] = 0; // init
 					sprintf(fileName,"%s/%d", RATES_DIR_NAME,ts_header.PID);
 					myfile.open(fileName);
-							myfile<<"Rate(Mbps)"<<"\t\t\t"<<"Packet Size"<<"\t\t\t"<<"deltaPCR"<<endl;
+					myfile<<"Rate(Mbps)"<<"\t\t\t"<<"Packet Size"<<"\t\t\t"<<"deltaPCR"<<endl;
 					myfile.close();
 				}
 
@@ -205,7 +190,7 @@ bool readTP(byteParser *pHeader, int64_t & PCR )
 
 int8_t buffer[300000000];
 
-void main()
+int main()
 {
 	int bytesRead;
 	int i;
@@ -217,15 +202,25 @@ void main()
 	uint32_t index = 0;
 	FILE *pFile;
 
+
 	pFile = fopen("stream.ts","rb");
+	if (pFile == NULL)
+	{
+		cout<<"Could not open input file"<<endl;
+		return 0;
+	}	
 	fseek (pFile , 0 , SEEK_END);
 	lSize = ftell (pFile);
 	rewind (pFile);
 	bytesRead = fread (buffer,1,30000000,pFile);
 	fclose(pFile);
 
-
+#ifdef linux
+	mkdir(RATES_DIR_NAME, 0777);
+#else
 	system(MAKEDIR);
+#endif
+
 
 
 	iterations = bytesRead/TS_PACKET_SIZE;
@@ -247,5 +242,5 @@ void main()
 		printf("Couldn't Sync!\n");
 	}
 
-
+	return 0;
 }
