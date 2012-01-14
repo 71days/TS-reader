@@ -2,25 +2,23 @@
 #define BYTE_PARSER_H_
 
 #include <stdint.h>
-<<<<<<< HEAD
+
 #include <assert.h>
 
 #define BITS_IN_BYTE 8
-=======
->>>>>>> 45ce718fbdd96e312368dd2d79e78256ad07e6e8
+
 
 class byteParser
 {
 private:
 	int8_t *m_poz;
 	int8_t m_bitPoz;
-<<<<<<< HEAD
+
 	uint32_t m_bitCounter;
 	int64_t m_init_poz;
-=======
+
 	uint32_t m_bytesParsed;
-	uint32_t m_bitCounter;
->>>>>>> 45ce718fbdd96e312368dd2d79e78256ad07e6e8
+
 public: 
 	byteParser(int8_t *initPoz);
 	template <class T>
@@ -31,7 +29,7 @@ public:
 	uint32_t getBytesParsed();
 };
 
-<<<<<<< HEAD
+
 /* 
 This class makes the parsing semi-transparent for us
 (we don't need to calculate offsets and masks for each field) 
@@ -111,6 +109,4 @@ uint32_t byteParser::getBytesParsed()
 }
 
 
-=======
->>>>>>> 45ce718fbdd96e312368dd2d79e78256ad07e6e8
 #endif //BYTE_PARSER_H_
