@@ -114,35 +114,6 @@ bool readTP(byteParser *pHeader, int64_t & PCR )
 
 	TSHeader ts_header;
 
-	uint16_t PESPacketLength;
-
-	uint8_t PES_scrambling_control;		
-	uint8_t	PES_priority;				
-	uint8_t	data_alignment_indicator;	
-	uint8_t	copyright;					
-	uint8_t	origOrCopy;					
-	uint8_t	PTS_DTS_flg; 				
-	uint8_t	ESCR_flg;					
-	uint8_t	ESrate_flg;					
-	uint8_t	DSM_trick_mode_flg;			
-	uint8_t	additional_cpy_info_flg;	
-	uint8_t	PES_CRC_flg;				
-	uint8_t	PES_extension_flg;			
-	uint8_t	PES_header_data_length;		
-
-
-	/* adaptation field */
-	bool discontinuity_indicator;				
-	bool random_access_indicator;					
-	bool elementary_stream_priority_indicator;	
-	bool PCR_flag = 0;
-	bool OPCR_flag;								
-	bool splicing_point_flag;						
-	bool transport_private_data_flag;				
-	bool adaptation_field_extension_flag;		
-
-	int64_t PCR_base;
-	uint16_t PCR_extension;
 
 
 	ts_header.fillHeader(pHeader);
