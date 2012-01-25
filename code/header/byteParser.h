@@ -2,8 +2,9 @@
 #define BYTE_PARSER_H_
 
 #include <stdint.h>
-
 #include <assert.h>
+
+using namespace std;
 
 #define BITS_IN_BYTE 8
 
