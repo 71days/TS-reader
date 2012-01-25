@@ -22,12 +22,63 @@ using namespace std;
 
 
 
-int packetIter;
+
+
+class ESRateInfo
+{
+public:
+	map<int, int> streamID;
+	map<int, int> packetSize;
+	map<int, int64_t>lastTime;
+	map<int, float>rateMbps;
+};
+
+class packetParser
+{
+	ESRateInfo	rateInfo;
+	int			packetIter;
+	int			bufferLength;
+	int8_t		*packetPtr;
+	uint32_t	TSByteOffset;
+
+	bool syncTS(int8_t buffer[], uint32_t &index, int8_t minNumOfSyncBytes, uint32_t lastElement); 
+	bool readTP(byteParser *pHeader, int64_t & PCR );
+public:
+		packetParser(int8_t *packet, int bufferLength);
+		bool sync(int8_t minNumOfSyncBytes);
+		void parsePackets(int numOfPackets);
+		map<int,float> getPIDRateMap();
+};
 
 
 
+packetParser::packetParser(int8_t *packet, int bufferLength)
+{
+	packetPtr			= packet;
+	this->bufferLength	= bufferLength;
+}
 
+bool packetParser::sync(int8_t minNumOfSyncBytes)
+{
+	TSByteOffset = 0;
+	return syncTS(packetPtr, TSByteOffset, minNumOfSyncBytes, bufferLength);
+}
 
+void packetParser::parsePackets(int numOfPackets)
+{
+		int64_t PCR;
+		for (packetIter=0; packetIter < numOfPackets; packetIter++)
+		{
+
+			readTP(&byteParser(&packetPtr[TSByteOffset + packetIter*TS_PACKET_SIZE]), PCR);
+			//printf("%lld\n",PCR);
+		}
+}
+
+map<int,float> packetParser::getPIDRateMap()
+{
+	return rateInfo.rateMbps;
+}
 /* 
 int8_t buffer[]			 [IN] array containg TS stream
 uint32_t &index			 [IN/OUT] starting element from which to look for, it will return the TS offset
@@ -36,7 +87,7 @@ uint32_t lastElement     [IN] upper search boundry
 
 return value: returns TRUE if it has found "minNumOfSyncBytes" sync bytes positioned at 188 bytes of eachother
 */
-bool syncTS(int8_t buffer[], uint32_t &index, int8_t minNumOfSyncBytes, uint32_t lastElement)
+bool packetParser::syncTS(int8_t buffer[], uint32_t &index, int8_t minNumOfSyncBytes, uint32_t lastElement)
 {
 	bool found;
 	int8_t i;
@@ -73,36 +124,7 @@ bool syncTS(int8_t buffer[], uint32_t &index, int8_t minNumOfSyncBytes, uint32_t
 
 
 
-
-
-
-/*
-class PESHeader: public TSHeader
-{
-
-}
-*/
-
-class ESRateInfo
-{
-public:
-	map<int, int> streamID;
-	map<int, int> packetSize;
-	map<int, int64_t>lastTime;
-	map<int, float>rateMbps;
-};
-/*
-class ESLib
-{
-
-}
-*/
-
-//map<int, int> testMap;
-//map<int, int> testMap2;
-
-ESRateInfo rateInfo;
-bool readTP(byteParser *pHeader, int64_t & PCR )
+bool packetParser::readTP(byteParser *pHeader, int64_t & PCR )
 {
 	ofstream myfile;
 	char fileName[255];
@@ -171,6 +193,7 @@ bool readTP(byteParser *pHeader, int64_t & PCR )
 		rateInfo.packetSize[ts_header.PID] = 0; //reset
 
 
+#ifdef CONSOLE_PRINT
 		cout<<"-------------------------------"<<endl;
 		cout<<"----Packet "<<packetIter<<"----"<<endl;
 		cout<<"-------------------------------"<<endl;
@@ -203,6 +226,7 @@ bool readTP(byteParser *pHeader, int64_t & PCR )
 		cout<<"Bytes parsed "				<<pHeader->getBytesParsed()<<endl;
 		cout << "Press any key to continue" 	<< endl;			
 		cin.get();
+#endif
 	}
 
 	rateInfo.packetSize[ts_header.PID] += TS_PACKET_SIZE - pHeader->getBytesParsed();
@@ -218,7 +242,6 @@ void main()
 	int i;
 	bool synced;
 	int lSize;
-	int iterations;
 
 	int64_t PCR;
 	uint32_t index = 0;
@@ -234,25 +257,18 @@ void main()
 
 	system(MAKEDIR);
 
-
-	iterations = bytesRead/TS_PACKET_SIZE;
-	synced = syncTS(buffer, index, 4, 10000);
+	packetParser packetReader(buffer,10000);
+	synced = packetReader.sync(4);
+	packetReader.parsePackets(10000);
 
 	if (synced)
 	{
 		printf("synced at %d\n", index);
-		for (packetIter=0;packetIter<iterations;packetIter++)
-		{
-
-			readTP(&byteParser(&buffer[index + packetIter*TS_PACKET_SIZE]), PCR);
-			//printf("%lld\n",PCR);
-		}
-
 	}
 	else
 	{	
 		printf("Couldn't Sync!\n");
 	}
 
-
+	map<int,float> dataRates = packetReader.getPIDRateMap();
 }
