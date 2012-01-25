@@ -39,6 +39,7 @@ public:
 	uint8_t	PES_CRC_flg;				
 	uint8_t	PES_extension_flg;			
 	uint8_t	PES_header_data_length;	
+	uint64_t PTS;
 
 
 
@@ -49,7 +50,7 @@ public:
 int8_t PESHeader::fillHeader(byteParser *pHeader)
 {
 	bool PESHeaderExt;
-	int i;
+	int i, aux;
 
 	streamID = pHeader->getBits<uint8_t>(8);
 	PESPacketLength = pHeader->getBits<uint16_t>(16);
@@ -91,6 +92,18 @@ int8_t PESHeader::fillHeader(byteParser *pHeader)
 		PES_CRC_flg					= pHeader->getBits<uint8_t>(1);
 		PES_extension_flg			= pHeader->getBits<uint8_t>(1);
 		PES_header_data_length		= pHeader->getBits<uint8_t>(8);
+		if (PTS_DTS_flg >= 2)
+		{
+			aux = pHeader->getBits<uint8_t>(4);
+			assert(aux == PTS_DTS_flg);
+			PTS = ((uint64_t)(pHeader->getBits<uint8_t>(3))) << 30;
+			aux = pHeader->getBits<uint8_t>(1);
+			assert(aux == 1);
+			PTS |= ((uint64_t)(pHeader->getBits<uint32_t>(15))) << 15;
+			aux = pHeader->getBits<uint8_t>(1);
+			assert(aux == 1);
+			PTS |= ((uint64_t)(pHeader->getBits<uint32_t>(15)));
+		}
 
 	}
 };

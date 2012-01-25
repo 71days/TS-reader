@@ -8,6 +8,7 @@
 #define TS_PACKET_SIZE 188
 #define PES_START_CODE_PREFIX 0x000001
 #define CLOCK_RATE 27 //MHz
+#define PTS_CLOCK_RATE 0.09 //Mhz
 
 enum
 {

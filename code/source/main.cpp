@@ -89,6 +89,7 @@ public:
 	map<int, int> streamID;
 	map<int, int> packetSize;
 	map<int, int64_t>lastTime;
+	map<int, float>rateMbps;
 };
 /*
 class ESLib
@@ -124,23 +125,23 @@ bool readTP(byteParser *pHeader, int64_t & PCR )
 	{
 
 
-				if (rateInfo.streamID.count(ts_header.PID))
-				{
-					assert(rateInfo.streamID[ts_header.PID] ==  ts_header.pes_header.streamID);
-				}
-				else
-				{
-					rateInfo.streamID[ts_header.PID] = ts_header.pes_header.streamID;
-					rateInfo.packetSize[ts_header.PID] = 0;
-					rateInfo.lastTime[ts_header.PID] = 0; // init
-					sprintf(fileName,"%s/%d", RATES_DIR_NAME,ts_header.PID);
-					myfile.open(fileName);
-							myfile<<"Rate(Mbps)"<<"\t\t\t"<<"Packet Size"<<"\t\t\t"<<"deltaPCR"<<endl;
-					myfile.close();
-				}
+		if (rateInfo.streamID.count(ts_header.PID))
+		{
+			assert(rateInfo.streamID[ts_header.PID] ==  ts_header.pes_header.streamID);
+		}
+		else
+		{
+			rateInfo.streamID[ts_header.PID] = ts_header.pes_header.streamID;
+			rateInfo.packetSize[ts_header.PID] = 0;
+			rateInfo.lastTime[ts_header.PID] = 0; // init
+			sprintf(fileName,"%s/%d", RATES_DIR_NAME,ts_header.PID);
+			myfile.open(fileName);
+			myfile<<"Rate(Mbps)"<<"\t\t\t"<<"Packet Size"<<"\t\t\t"<<"deltaPCR"<<endl;
+			myfile.close();
+		}
 
 
-	    sprintf(fileName,"%s/%d", RATES_DIR_NAME,ts_header.PID);
+		sprintf(fileName,"%s/%d", RATES_DIR_NAME,ts_header.PID);
 		myfile.open(fileName,ios::app);
 
 		if(ts_header.PCR != -1)
@@ -152,12 +153,18 @@ bool readTP(byteParser *pHeader, int64_t & PCR )
 			myfile<<instantRate<<"\t\t\t"<<rateInfo.packetSize[ts_header.PID]<<"\t\t\t"<<ts_header.PCR - rateInfo.lastTime[ts_header.PID]<<endl;
 
 			rateInfo.lastTime[ts_header.PID] = ts_header.PCR;
+			rateInfo.rateMbps[ts_header.PID] = instantRate;
 
 		}
 		else
 		{
-			myfile<<"PCR not present. To be decoded using PES timing information(PTS)"<<endl;
-			//TO DO: extract rateInfo.lastTime[ts_header.PID] = ts_header.pes_header.;
+			instantRate = rateInfo.packetSize[ts_header.PID] * (float)PTS_CLOCK_RATE * BITS_IN_BYTE;  
+			deltaTime = (ts_header.pes_header.PTS - rateInfo.lastTime[ts_header.PID]);
+			instantRate /= deltaTime; 
+			myfile<<instantRate<<"\t\t\t"<<rateInfo.packetSize[ts_header.PID]<<"\t\t\t"<<ts_header.pes_header.PTS  - rateInfo.lastTime[ts_header.PID]<<endl;
+
+			rateInfo.lastTime[ts_header.PID] = ts_header.pes_header.PTS;
+			rateInfo.rateMbps[ts_header.PID] = instantRate;
 		}
 
 		myfile.close();
