@@ -10,6 +10,11 @@
 #include <stdint.h>
 #include <assert.h>
 
+#ifdef linux
+#include <fcntl.h>
+#include <sys/stat.h>
+#endif
+
 #include "byteParser.h"
 #include "TSHeader.h"
 
@@ -236,7 +241,7 @@ bool packetParser::readTP(byteParser *pHeader, int64_t & PCR )
 
 int8_t buffer[300000000];
 
-void main()
+int main()
 {
 	int bytesRead;
 	int i;
@@ -254,13 +259,14 @@ void main()
 	bytesRead = fread (buffer,1,30000000,pFile);
 	fclose(pFile);
 
-
-	system(MAKEDIR);
+#ifdef linux	  	
+	mkdir(RATES_DIR_NAME, 0777);
+#else
+	system(MAKEDIR); 	
+#endif
 
 	packetParser packetReader(buffer,10000);
 	synced = packetReader.sync(4);
-	packetReader.parsePackets(10000);
-
 	if (synced)
 	{
 		printf("synced at %d\n", index);
@@ -268,7 +274,10 @@ void main()
 	else
 	{	
 		printf("Couldn't Sync!\n");
+		assert(0);
 	}
 
+	packetReader.parsePackets(10000);
 	map<int,float> dataRates = packetReader.getPIDRateMap();
+	return 0;
 }
