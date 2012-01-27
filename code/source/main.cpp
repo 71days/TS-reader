@@ -34,8 +34,10 @@ class ESRateInfo
 public:
 	map<int, int> streamID;
 	map<int, int> packetSize;
+	map<int, int> numOfPackets;
 	map<int, int64_t>lastTime;
 	map<int, float>rateMbps;
+	map<int, float>rawRateMbps;
 };
 
 class packetParser
@@ -53,6 +55,7 @@ public:
 		bool sync(int8_t minNumOfSyncBytes);
 		void parsePackets(int numOfPackets);
 		map<int,float> getPIDRateMap();
+		float getTsRate();
 };
 
 
@@ -84,8 +87,19 @@ map<int,float> packetParser::getPIDRateMap()
 {
 	return rateInfo.rateMbps;
 }
+
+float packetParser::getTsRate()
+{
+	float TsRate = 0;
+	map<int, float>::const_iterator iter;
+	for( iter = rateInfo.rawRateMbps.begin();  iter != rateInfo.rawRateMbps.end(); ++iter)
+	{
+		TsRate += (*iter).second;
+	}
+	return TsRate;
+}
 /* 
-int8_t buffer[]			 [IN] array containg TS stream
+int8_t buffer[]			 [IN] arra y containg TS stream
 uint32_t &index			 [IN/OUT] starting element from which to look for, it will return the TS offset
 int8_t minNumOfSyncBytes [IN] how many sync bytes to look for before choosing offset
 uint32_t lastElement     [IN] upper search boundry
@@ -138,6 +152,7 @@ bool packetParser::readTP(byteParser *pHeader, int64_t & PCR )
 	bool PESHeaderExt;
 	int i;
 	float instantRate;
+	float rawInstantRate;
 	int64_t deltaTime;
 
 	TSHeader ts_header;
@@ -160,6 +175,7 @@ bool packetParser::readTP(byteParser *pHeader, int64_t & PCR )
 		{
 			rateInfo.streamID[ts_header.PID] = ts_header.pes_header.streamID;
 			rateInfo.packetSize[ts_header.PID] = 0;
+			rateInfo.numOfPackets[ts_header.PID] = 0;
 			rateInfo.lastTime[ts_header.PID] = 0; // init
 			sprintf(fileName,"%s/%d", RATES_DIR_NAME,ts_header.PID);
 			myfile.open(fileName);
@@ -172,30 +188,37 @@ bool packetParser::readTP(byteParser *pHeader, int64_t & PCR )
 		myfile.open(fileName,ios::app);
 
 		if(ts_header.PCR != -1)
-		{
+		{ /* PCR is present */
 			/*Mbps*/
 			instantRate = rateInfo.packetSize[ts_header.PID] * CLOCK_RATE * BITS_IN_BYTE;  
+			rawInstantRate = rateInfo.numOfPackets[ts_header.PID] * TS_PACKET_SIZE * CLOCK_RATE * BITS_IN_BYTE;  
 			deltaTime = (ts_header.PCR - rateInfo.lastTime[ts_header.PID]);
 			instantRate /= deltaTime; 
+			rawInstantRate /= deltaTime;
 			myfile<<instantRate<<"\t\t\t"<<rateInfo.packetSize[ts_header.PID]<<"\t\t\t"<<ts_header.PCR - rateInfo.lastTime[ts_header.PID]<<endl;
 
 			rateInfo.lastTime[ts_header.PID] = ts_header.PCR;
 			rateInfo.rateMbps[ts_header.PID] = instantRate;
-
+			rateInfo.rawRateMbps[ts_header.PID] = rawInstantRate;
 		}
 		else
-		{
-			instantRate = rateInfo.packetSize[ts_header.PID] * (float)PTS_CLOCK_RATE * BITS_IN_BYTE;  
+		{ /* PCR is not present and we use PTS instead */
+			instantRate = rateInfo.packetSize[ts_header.PID] * (float)PTS_CLOCK_RATE * BITS_IN_BYTE;
+			rawInstantRate = rateInfo.numOfPackets[ts_header.PID] * TS_PACKET_SIZE * (float)PTS_CLOCK_RATE * BITS_IN_BYTE;  
 			deltaTime = (ts_header.pes_header.PTS - rateInfo.lastTime[ts_header.PID]);
-			instantRate /= deltaTime; 
+			instantRate /= deltaTime;
+			rawInstantRate /= deltaTime;
 			myfile<<instantRate<<"\t\t\t"<<rateInfo.packetSize[ts_header.PID]<<"\t\t\t"<<ts_header.pes_header.PTS  - rateInfo.lastTime[ts_header.PID]<<endl;
 
 			rateInfo.lastTime[ts_header.PID] = ts_header.pes_header.PTS;
 			rateInfo.rateMbps[ts_header.PID] = instantRate;
+			rateInfo.rawRateMbps[ts_header.PID] = rawInstantRate;
 		}
 
 		myfile.close();
-		rateInfo.packetSize[ts_header.PID] = 0; //reset
+		rateInfo.packetSize[ts_header.PID] = 0; //resets
+		rateInfo.numOfPackets[ts_header.PID] = 0; //reset
+
 
 
 #ifdef CONSOLE_PRINT
@@ -235,6 +258,7 @@ bool packetParser::readTP(byteParser *pHeader, int64_t & PCR )
 	}
 
 	rateInfo.packetSize[ts_header.PID] += TS_PACKET_SIZE - pHeader->getBytesParsed();
+	rateInfo.numOfPackets[ts_header.PID]++;
 #endif
 	return 0;
 }
@@ -247,6 +271,7 @@ int main()
 	int i;
 	bool synced;
 	int lSize;
+	float TsRate;
 
 	int64_t PCR;
 	uint32_t index = 0;
@@ -279,5 +304,6 @@ int main()
 
 	packetReader.parsePackets(10000);
 	map<int,float> dataRates = packetReader.getPIDRateMap();
+	TsRate	 				 = packetReader.getTsRate();
 	return 0;
 }
